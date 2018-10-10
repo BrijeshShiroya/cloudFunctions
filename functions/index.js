@@ -13,7 +13,7 @@ var serviceAccount = require("./serviceAccountKey.json");
 // admin.initializeApp(functions.config().firebase);
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    databaseURL: "https://sportyvity.firebaseio.com/"
+    databaseURL: "https://cara-patient-85c2e.firebaseio.com/"
 });
 
 //

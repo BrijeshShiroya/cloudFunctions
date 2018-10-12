@@ -25,7 +25,7 @@ exports.helloWorld = functions.https.onRequest((request, response) => {
     // objUser.profilePic = 'ProfilePicture/FB1578818045507271.jpg'
     // objUser.userId = '5b0fff21-fe75-e811-80c3-0003ff6d7265'
     // processUser('5b0fff21-fe75-e811-80c3-0003ff6d7265', objUser, admin, false)
-    response.send("Hello from QA-Sportyvity.....!");
+    response.send("Hello from Cara.....!");
 });
 
 
@@ -351,9 +351,21 @@ exports.onUserUpdate = functions.database.ref('/users/{userId}').onWrite((change
 
     //Create a local object for update
     let objUser = {};
-    objUser.firstName = afterData.firstName
-    objUser.lastName = afterData.lastName
-    objUser.profilePic = afterData.profilePic
+    if (afterData.firstName) {
+        objUser.firstName = afterData.firstName
+    }
+    if (afterData.lastName) {
+        objUser.lastName = afterData.lastName
+    }
+    if (afterData.profilePic) {
+        objUser.profilePic = afterData.profilePic
+    }
+    if (afterData.firstName) {
+        objUser.firstName = afterData.firstName
+    }
+
+    // objUser.lastName = afterData.lastName
+    // objUser.profilePic = afterData.profilePic
     objUser.userId = userId
     // Also check if deviceToken is available then add into static array, so it will be update
     if (afterData.deviceToken) {
@@ -393,17 +405,24 @@ function processUser(userId, userData, userOnlineStatus) {
                 allMultipathData["/chatList/" + key + "/onlineMembers/" + userId] = userOnlineStatus
             }
 
+            // make user online status for particular chat list
+            allMultipathData["/chatList/" + key + "/onlineMembersSystem/" + userId] = userOnlineStatus
+
         });
 
         admin.database().ref('/').update(allMultipathData, function (error) {
             if (error) {
-                console.log("Error updating data:", error);
+                printConsole("Error updating data:", error);
             } else {
                 processUser('Updated')
             }
             return 'User information is updated successfully';
         });
-    });
+    }).catch(function (error) {
+        console.log('There has been a problem with your fetch operation: ' + error.message);
+        // ADD THIS THROW error
+        throw error;
+    });;
 }
 
 function printConsole(text) {
@@ -425,6 +444,7 @@ exports.onUpdateCount = functions.database.ref('/converstionData/{chatId}/{detai
 
 
     const userId = lastObject.userId;
+
     // Here need to get the data for chat id and then need to send the push notification.
     const chatListPromise = admin.database().ref('/chatList/' + chatId).once('value');
     Promise.all([chatListPromise]).then(values => {
@@ -446,9 +466,14 @@ exports.onUpdateCount = functions.database.ref('/converstionData/{chatId}/{detai
         let senderInfo = chatListObject.allMembers[id];
         printConsole('senderID is ' + id)
         printConsole('senderInfo is ' + JSON.stringify(senderInfo))
+        let userName = '';
+        let title = '';
+        if (senderInfo.firstName) {
+            title = senderInfo.firstName + ' ' + senderInfo.lastName
+            userName = senderInfo.firstName;
+        }
 
-        let title = senderInfo.firstName + ' ' + senderInfo.lastName
-        let userName = senderInfo.firstName;
+
         // Check if current chat is one-one or group
         if (chatListObject.chatTypeId === 1) {
             isOneToOne = true;
@@ -460,6 +485,7 @@ exports.onUpdateCount = functions.database.ref('/converstionData/{chatId}/{detai
         // let finalArrayList = [];
         for (var i = 0; i < length; i++) {
             let currentUserId = allKeysOnline[i]
+            printConsole('currentUserId.... ' + currentUserId)
             // Need to send notification other than sender
             if (currentUserId !== id) {
                 // Get user status
@@ -477,48 +503,51 @@ exports.onUpdateCount = functions.database.ref('/converstionData/{chatId}/{detai
 
                     // Get device token from chatList
                     // If current user is having a device token then send notification to all the device token...
-                    const allDeviceToken = chatListObject.allMembers[currentUserId].deviceToken;
-                    let allTokens = Object.keys(allDeviceToken); // All the token for notification
-                    printConsole('All Device Token.... ' + JSON.stringify(allDeviceToken));
-                    if (allTokens.length > 0) {
-                        // Get user's unread count
-                        const getUnreadCountPromise = admin.database().ref('/userConnection/' + currentUserId).once('value');
-                        printConsole('Calling for Unread Count');
-                        // getUnreadCountPromise.then((snapshot) => {
-                        Promise.all([getUnreadCountPromise]).then(values => {
 
-                            let unreadCountObject = values[0].val()
-                            let unreadCount = 0;
+                    if (chatListObject.allMembers[currentUserId].deviceToken) {
+                        const allDeviceToken = chatListObject.allMembers[currentUserId].deviceToken;
+                        let allTokens = Object.keys(allDeviceToken); // All the token for notification
+                        printConsole('All Device Token.... ' + JSON.stringify(allDeviceToken));
+                        if (allTokens.length > 0) {
+                            // Get user's unread count
+                            const getUnreadCountPromise = admin.database().ref('/userConnection/' + currentUserId).once('value');
+                            printConsole('Calling for Unread Count');
+                            // getUnreadCountPromise.then((snapshot) => {
+                            Promise.all([getUnreadCountPromise]).then(values => {
 
-                            // unreadCountObject.forEach(function (childSnapshot) {
-                            //     var value = childSnapshot.val();
-                            //     unreadCount = unreadCount + value
-                            // });
-                            let allKeys = Object.keys(unreadCountObject)
-                            for (var i = 0; i < allKeys.length; i++) {
-                                let key = allKeys[i]
-                                let c = unreadCountObject[key]
-                                unreadCount = unreadCount + c
-                            }
+                                let unreadCountObject = values[0].val()
+                                let unreadCount = 0;
 
-                            printConsole('UnreadCount: ' + unreadCount);
-                            const data = {
-                                userId: `${id}`,
-                                chatId: `${chatId}`,
-                                type: '202',
-                            };
-                            let body = lastObject.text;
-                            if (isOneToOne === false && isSystemMessage === false) {
-                                body = userName + ': ' + lastObject.text
-                            }
-                            printConsole('Need to send notification....')
+                                // unreadCountObject.forEach(function (childSnapshot) {
+                                //     var value = childSnapshot.val();
+                                //     unreadCount = unreadCount + value
+                                // });
+                                let allKeys = Object.keys(unreadCountObject)
+                                for (var i = 0; i < allKeys.length; i++) {
+                                    let key = allKeys[i]
+                                    let c = unreadCountObject[key]
+                                    unreadCount = unreadCount + c
+                                }
 
-                            for (var i = 0; i < allTokens.length; i++) {
-                                const token = allTokens[i];
-                                printConsole('Got the notification and send on it.... ' + token)
-                                sendPush(token, title, body, data, userId, admin, unreadCount.toString())
-                            }
-                        });
+                                printConsole('UnreadCount: ' + unreadCount);
+                                const data = {
+                                    userId: `${id}`,
+                                    chatId: `${chatId}`,
+                                    type: '202',
+                                };
+                                let body = lastObject.text;
+                                if (isOneToOne === false && isSystemMessage === false) {
+                                    body = userName + ': ' + lastObject.text
+                                }
+                                printConsole('Need to send notification....')
+
+                                for (var i = 0; i < allTokens.length; i++) {
+                                    const token = allTokens[i];
+                                    printConsole('Got the notification and send on it.... ' + token)
+                                    sendPush(token, title, body, data, userId, admin, unreadCount.toString())
+                                }
+                            });
+                        }
                     }
                 }
             }

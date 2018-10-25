@@ -220,27 +220,34 @@ exports.removeUserFromChat = functions.https.onRequest((request, response) => {
 });
 exports.deleteUser = functions.https.onRequest((request, response) => {
     const userId = request.query.userId;
+
+    printConsole('userId: ' + userId);
     // const chatId = request.query.chatId;
     // const allUser = request.query.accept;
+
 
     // Get all the information about for user's connection and make create a path for chatList
     const userConenctionPromise = admin.database().ref('/userConnection/' + userId).once('value');
 
     Promise.all([userConenctionPromise]).then(values => {
+        printConsole('Getting all connection');
         // var allMultipathData = {} // Helps to update in batch 
         const userConenction = values[0]; // Get user's userConnection dataπ
-
+        printConsole('Coming for userConenction : ' + userConenction);
 
         var path = []
         userConenction.forEach(function (childSnapshot) {
             var key = childSnapshot.key;
+            printConsole('Coming for key: ' + key);
             var getChatData = admin.database().ref('/chatList/' + key).once('value');
+            printConsole('Coming for getChatData: ' + getChatData);
             path.push(getChatData)
         })
-
+        printConsole('Coming for 2: ' + JSON.stringify(path));
         Promise.all(path).then(allChat => {
+            printConsole('Coming for 3: ');
             var allMultipathData = {} // Helps to update in batch 
-            let chatId = request.query.chatId
+            // let chatId = request.query.chatId
             for (var i = 0; i < allChat.length; i++) {
                 var key = allChat[i].key;
                 let chatInfo = allChat[i].val()
@@ -262,6 +269,8 @@ exports.deleteUser = functions.https.onRequest((request, response) => {
 
             allMultipathData["/users/" + userId] = null
             // response.send(JSON.stringify(allMultipathData))
+            printConsole('Coming for Final Step');
+
             admin.database().ref('/').update(allMultipathData, function (error) {
                 if (error) {
                     response.send("Error updating data:", error);
@@ -377,14 +386,20 @@ exports.onUserUpdate = functions.database.ref('/users/{userId}').onWrite((change
     // Set false into chatList in onlineMembers
     let userOnlineStatus = true
     userOnlineStatus = afterData.status
+
+    // Need to check for available flage
+    if (afterData.isAvailable === false) {
+        userOnlineStatus = false
+    }
+
     printConsole('User Status userId: ' + userId)
     // Call a function to update the data
-    processUser(userId, objUser, userOnlineStatus)
+    processUser(userId, objUser, userOnlineStatus, afterData.isAvailable)
 });
 
 // This function is used to update the user information in chatList node. 
 // It will get information from userConnection and make necessary changes.
-function processUser(userId, userData, userOnlineStatus) {
+function processUser(userId, userData, userOnlineStatus, isAvailable) {
 
     // Get all the information about for user's connection and make create a path for chatList
     const userConenctionPromise = admin.database().ref('/userConnection/' + userId).once('value');
@@ -405,6 +420,9 @@ function processUser(userId, userData, userOnlineStatus) {
                 allMultipathData["/chatList/" + key + "/onlineMembers/" + userId] = userOnlineStatus
             }
 
+            // Update the memberStatus
+            allMultipathData["/chatList/" + key + "/memberStatus/" + userId] = isAvailable
+
             // make user online status for particular chat list
             allMultipathData["/chatList/" + key + "/onlineMembersSystem/" + userId] = userOnlineStatus
 
@@ -414,7 +432,7 @@ function processUser(userId, userData, userOnlineStatus) {
             if (error) {
                 printConsole("Error updating data:", error);
             } else {
-                processUser('Updated')
+                printConsole('Updated')
             }
             return 'User information is updated successfully';
         });
@@ -469,7 +487,7 @@ exports.onUpdateCount = functions.database.ref('/converstionData/{chatId}/{detai
         let userName = '';
         let title = '';
         if (senderInfo.firstName) {
-            title = senderInfo.firstName + ' ' + senderInfo.lastName
+            title = senderInfo.firstName
             userName = senderInfo.firstName;
         }
 
@@ -486,71 +504,74 @@ exports.onUpdateCount = functions.database.ref('/converstionData/{chatId}/{detai
         for (var i = 0; i < length; i++) {
             let currentUserId = allKeysOnline[i]
             printConsole('currentUserId.... ' + currentUserId)
-            // Need to send notification other than sender
-            if (currentUserId !== id) {
-                // Get user status
-                let isOnline = allOnlineMember[currentUserId]
-                let isMember = allMemberStatus[currentUserId]
-                printConsole('isOnline.... ' + isOnline)
-                printConsole('isMember.... ' + isMember)
+            if (currentUserId) {
+                if (currentUserId !== id) {
+                    // Get user status
+                    let isOnline = allOnlineMember[currentUserId]
+                    let isMember = allMemberStatus[currentUserId]
+                    printConsole('isOnline.... ' + isOnline)
+                    printConsole('isMember.... ' + isMember)
 
-                //Check if user is offline and his/her statu is active.
-                if (isOnline === false && isMember === true) {
+                    //Check if user is offline and his/her statu is active.
+                    if (isOnline === false && isMember === true) {
 
-                    printConsole('Member is not online.... ' + currentUserId)
-                    // User is found..... Good to go for push 
-                    // Check for device token he has and send just fire....
+                        printConsole('Member is not online.... ' + currentUserId)
+                        // User is found..... Good to go for push 
+                        // Check for device token he has and send just fire....
 
-                    // Get device token from chatList
-                    // If current user is having a device token then send notification to all the device token...
+                        // Get device token from chatList
+                        // If current user is having a device token then send notification to all the device token...
 
-                    if (chatListObject.allMembers[currentUserId].deviceToken) {
-                        const allDeviceToken = chatListObject.allMembers[currentUserId].deviceToken;
-                        let allTokens = Object.keys(allDeviceToken); // All the token for notification
-                        printConsole('All Device Token.... ' + JSON.stringify(allDeviceToken));
-                        if (allTokens.length > 0) {
-                            // Get user's unread count
-                            const getUnreadCountPromise = admin.database().ref('/userConnection/' + currentUserId).once('value');
-                            printConsole('Calling for Unread Count');
-                            // getUnreadCountPromise.then((snapshot) => {
-                            Promise.all([getUnreadCountPromise]).then(values => {
+                        if (chatListObject.allMembers[currentUserId].deviceToken) {
+                            const allDeviceToken = chatListObject.allMembers[currentUserId].deviceToken;
+                            let allTokens = Object.keys(allDeviceToken); // All the token for notification
+                            printConsole('All Device Token.... ' + JSON.stringify(allDeviceToken));
+                            if (allTokens.length > 0) {
+                                // Get user's unread count
+                                const getUnreadCountPromise = admin.database().ref('/userConnection/' + currentUserId).once('value');
+                                printConsole('Calling for Unread Count');
+                                // getUnreadCountPromise.then((snapshot) => {
+                                Promise.all([getUnreadCountPromise]).then(values => {
 
-                                let unreadCountObject = values[0].val()
-                                let unreadCount = 0;
+                                    let unreadCountObject = values[0].val()
+                                    let unreadCount = 0;
 
-                                // unreadCountObject.forEach(function (childSnapshot) {
-                                //     var value = childSnapshot.val();
-                                //     unreadCount = unreadCount + value
-                                // });
-                                let allKeys = Object.keys(unreadCountObject)
-                                for (var i = 0; i < allKeys.length; i++) {
-                                    let key = allKeys[i]
-                                    let c = unreadCountObject[key]
-                                    unreadCount = unreadCount + c
-                                }
+                                    // unreadCountObject.forEach(function (childSnapshot) {
+                                    //     var value = childSnapshot.val();
+                                    //     unreadCount = unreadCount + value
+                                    // });
+                                    let allKeys = Object.keys(unreadCountObject)
+                                    for (var i = 0; i < allKeys.length; i++) {
+                                        let key = allKeys[i]
+                                        let c = unreadCountObject[key]
+                                        unreadCount = unreadCount + c
+                                    }
 
-                                printConsole('UnreadCount: ' + unreadCount);
-                                const data = {
-                                    userId: `${id}`,
-                                    chatId: `${chatId}`,
-                                    type: '202',
-                                };
-                                let body = lastObject.text;
-                                if (isOneToOne === false && isSystemMessage === false) {
-                                    body = userName + ': ' + lastObject.text
-                                }
-                                printConsole('Need to send notification....')
+                                    printConsole('UnreadCount: ' + unreadCount);
+                                    const data = {
+                                        userId: `${id}`,
+                                        chatId: `${chatId}`,
+                                        type: '202',
+                                    };
+                                    let body = lastObject.text;
+                                    if (isOneToOne === false && isSystemMessage === false) {
+                                        body = userName + ': ' + lastObject.text
+                                    }
+                                    printConsole('Need to send notification....')
 
-                                for (var i = 0; i < allTokens.length; i++) {
-                                    const token = allTokens[i];
-                                    printConsole('Got the notification and send on it.... ' + token)
-                                    sendPush(token, title, body, data, userId, admin, unreadCount.toString())
-                                }
-                            });
+                                    for (var i = 0; i < allTokens.length; i++) {
+                                        const token = allTokens[i];
+                                        printConsole('Got the notification and send on it.... ' + token)
+                                        sendPush(token, title, body, data, userId, admin, unreadCount.toString())
+                                    }
+                                });
+                            }
                         }
                     }
                 }
             }
+            // Need to send notification other than sender
+
         }
         printConsole('Done');
     });
